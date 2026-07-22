@@ -1,0 +1,107 @@
+[dense_retriever] Loading embedding model: all-MiniLM-L6-v2
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 5053.02it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[hybrid_retriever] Initializing CrossEncoder (BAAI/bge-reranker-large)...
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 5560.45it/s]
+[1mXLMRobertaForSequenceClassification LOAD REPORT[0m from: BAAI/bge-reranker-large
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+roberta.embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[dense_retriever] Loaded index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store: 80 vectors
+[sparse_retriever] Loaded index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store: 80 documents
+[hybrid_retriever] Loaded hybrid index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store
+/Users/raju/Downloads/AGENTIC-AI-main/research_assistant/verification/gemini_verifier.py:11: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+/Users/raju/Downloads/AGENTIC-AI-main/research_assistant/venv/lib/python3.14/site-packages/langchain_core/utils/pydantic.py:41: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+  from pydantic.v1 import BaseModel as BaseModelV1
+[ragas_batch] Full mode: model=gemini-2.0-flash, judge top-1 chunks, 15.0s delay between API calls
+[ragas_batch] (1/6) q01: what is self attention
+[hybrid_retriever] Query: 'what is self attention self-attention'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] relevance judge error: 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash
+Please retry in 32.007375431s. [links {
+  description: "Learn more about Gemini API quotas"
+  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
+}
+, violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+  quota_id: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+violations {
+  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count"
+  quota_id: "GenerateContentInputTokensPerModelPerMinute-FreeTier"
+  quota_dimensions {
+    key: "model"
+    value: "gemini-2.0-flash"
+  }
+  quota_dimensions {
+    key: "location"
+    value: "global"
+  }
+}
+, retry_delay {
+  seconds: 32
+}
+]
+[ragas_batch] Daily Gemini quota hit — saving partial results (0 done).
+
+=== RAGAS Batch Evaluation ===
+Mode:           full
+Queries:        6
+Threshold:      0.35
+Elapsed:        4.8s
+
+--- Retrieval (labeled golden set) ---
+Precision:      0.00%  (TP=0 FP=0)
+Recall:         0.00%  (TP=0 FN=0)
+F1:             0.00%
+Hit@k in-domain:0.00%
+Off-topic block:0.00%
+
+--- RAGAS proxies (LLM-as-judge) ---
+⚠️  Stopped early: Gemini daily quota exhausted (partial eval)
+Model:             gemini-2.0-flash
+
+Results written to evaluation/ragas_results_full.jsonl

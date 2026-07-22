@@ -1,0 +1,44 @@
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Secrets — never commit
+.env
+.env.local
+**/.env
+**/.env.local
+
+# Local runtime / heavy artifacts
+research_assistant/venv/
+research_assistant/index_store/
+research_assistant/logs/
+research_assistant/artifacts/
+*.index
+*.faiss
+*.pkl
+
+# Large PDF dumps (keep small demo PDFs under research_assistant/pdfs/custom if needed)
+pdfs/
+research_assistant/pdfs/arxiv/
+
+# Zip / temp
+*.zip
+*.dmg
+*.pkg

@@ -1,0 +1,98 @@
+{
+  "elapsed_sec": 212.07,
+  "validator": {
+    "agent": "validator",
+    "ok": false,
+    "checks": [
+      {
+        "name": "llm_backend_gemini",
+        "passed": true,
+        "detail": "gemini"
+      },
+      {
+        "name": "gemini_key_present",
+        "passed": true,
+        "detail": "set"
+      },
+      {
+        "name": "index_exists",
+        "passed": true,
+        "detail": "80 vectors"
+      },
+      {
+        "name": "gemini_api_call",
+        "passed": false,
+        "detail": "daily_quota_exhausted"
+      },
+      {
+        "name": "unit_tests",
+        "passed": true,
+        "detail": "_bootstrap>:491: DeprecationWarning: builtin type swigvarlink has no __module__ attribute ........... ---------------------------------------------------------------------- Ran 13 tests in 3.929s  OK "
+      }
+    ],
+    "api_status": "daily_quota_exhausted",
+    "api_detail": "429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current"
+  },
+  "monitor": {
+    "agent": "monitor",
+    "trace_count": 2,
+    "verification_pass_rate": 0.0,
+    "context_relevancy_rate": 0.5,
+    "empty_retrieval_rate": 0.0,
+    "avg_latency_ms": 28602.32,
+    "last_full_eval_mode": "full_proxy",
+    "last_full_eval_f1": 0.9388,
+    "last_context_relevancy": 0.9375
+  },
+  "decision": {
+    "agent": "decision",
+    "action": "run_ragas",
+    "mode": "full_proxy",
+    "reason": "Gemini API blocked (daily_quota_exhausted) — run 30-query proxy-judge eval (reranker relevancy, no API).",
+    "args": {
+      "full": true,
+      "proxy_judge": true,
+      "in_domain_only": false,
+      "limit": null,
+      "judge_k": 2,
+      "api_delay": 0.0
+    }
+  },
+  "executor": {
+    "agent": "executor",
+    "skipped": false,
+    "mode": "full_proxy",
+    "summary": {
+      "mode": "full_proxy",
+      "golden_count": 30,
+      "evaluated_count": 30,
+      "quota_exhausted": false,
+      "threshold": 0.35,
+      "judge_k": 2,
+      "api_delay_sec": 0.0,
+      "gemini_model": "gemini-2.0-flash",
+      "elapsed_sec": 179.99,
+      "retrieval": {
+        "n": 30,
+        "tp": 23,
+        "fp": 2,
+        "tn": 4,
+        "fn": 1,
+        "precision": 0.92,
+        "recall": 0.9583,
+        "f1": 0.9388,
+        "hit_at_k_in_domain": 0.9583,
+        "off_topic_block_rate": 0.6667
+      },
+      "ragas_proxies": {
+        "context_relevancy_rate": 0.9375,
+        "faithfulness_rate": null,
+        "first_pass_faithfulness_rate": null,
+        "faithfulness_evaluated": 0,
+        "relevance_judged_queries": 24,
+        "note": "context_relevancy uses reranker/cosine proxy, not LLM judge"
+      }
+    },
+    "output": "/Users/raju/Downloads/AGENTIC-AI-main/research_assistant/evaluation/ragas_results_full.jsonl"
+  }
+}

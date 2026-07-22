@@ -1,0 +1,252 @@
+=== Eval Orchestrator: Validator + Monitor (parallel) ===
+[dense_retriever] Loading embedding model: all-MiniLM-L6-v2
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 5682.82it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[dense_retriever] Loaded index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store: 80 vectors
+/Users/raju/Downloads/AGENTIC-AI-main/research_assistant/verification/gemini_verifier.py:11: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+
+--- Validator ---
+  [PASS] llm_backend_gemini: gemini
+  [PASS] gemini_key_present: set
+  [PASS] index_exists: 80 vectors
+  [FAIL] gemini_api_call: daily_quota_exhausted
+  [PASS] unit_tests: _bootstrap>:491: DeprecationWarning: builtin type swigvarlink has no __module__ attribute ........... ---------------------------------------------------------------------- Ran 13 tests in 3.929s  OK 
+  API status: daily_quota_exhausted
+
+--- Monitor ---
+  trace_count: 2
+  verification_pass_rate: 0.0
+  context_relevancy_rate: 0.5
+  empty_retrieval_rate: 0.0
+  avg_latency_ms: 28602.32
+  last_full_eval_mode: full_proxy
+  last_full_eval_f1: 0.9388
+  last_context_relevancy: 0.9375
+
+--- Decision ---
+  action: run_ragas
+  mode:   full_proxy
+  reason: Gemini API blocked (daily_quota_exhausted) — run 30-query proxy-judge eval (reranker relevancy, no API).
+
+=== Executor ===
+[dense_retriever] Loading embedding model: all-MiniLM-L6-v2
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 11820.11it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[hybrid_retriever] Initializing CrossEncoder (BAAI/bge-reranker-large)...
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 5808.12it/s]
+[1mXLMRobertaForSequenceClassification LOAD REPORT[0m from: BAAI/bge-reranker-large
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+roberta.embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[dense_retriever] Loaded index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store: 80 vectors
+[sparse_retriever] Loaded index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store: 80 documents
+[hybrid_retriever] Loaded hybrid index from /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/index_store
+[ragas_batch] Proxy-judge mode: reranker>=0.5 or cosine>=0.35 on top-2 chunks (no Gemini API)
+[ragas_batch] (1/30) q01: what is self attention
+[hybrid_retriever] Query: 'what is self attention self-attention'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (2/30) q02: what is self-attention
+[hybrid_retriever] Query: 'what is self-attention self attention'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (3/30) q03: explain multi-head attention
+[hybrid_retriever] Query: 'explain multi-head attention'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (4/30) q04: scaled dot-product attention
+[hybrid_retriever] Query: 'scaled dot-product attention'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (5/30) q05: positional encoding in transformer
+[hybrid_retriever] Query: 'positional encoding in transformer positional-encoding'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (6/30) q06: encoder decoder architecture
+[hybrid_retriever] Query: 'encoder decoder architecture encoder-decoder-architecture'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (7/30) q07: how does the transformer model work
+[hybrid_retriever] Query: 'how does the transformer model work how-does-the-transformer-model-work'
+[score_filter] Dropped 6/20 results below threshold 0.250 (lowest seen: 0.206) [technical] query='how does the transformer model work how-'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (8/30) q08: attention is all you need main contribution
+[hybrid_retriever] Query: 'attention is all you need main contribution all-you-need-main-contribution'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (9/30) q09: BLEU score translation results
+[hybrid_retriever] Query: 'BLEU score translation results bleu-score-translation-results'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (10/30) q10: WMT 2014 English German translation
+[hybrid_retriever] Query: 'WMT 2014 English German translation english-german-translation'
+[score_filter] Dropped 9/20 results below threshold 0.350 (lowest seen: 0.282) query='WMT 2014 English German translation engl'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (11/30) q11: machine translation benchmark results
+[hybrid_retriever] Query: 'machine translation benchmark results machine-translation-benchmark-results'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (12/30) q12: layer normalization transformer
+[hybrid_retriever] Query: 'layer normalization transformer layer-normalization-transformer'
+[score_filter] Dropped 5/20 results below threshold 0.250 (lowest seen: 0.228) [technical] query='layer normalization transformer layer-no'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (13/30) q13: residual connections attention
+[hybrid_retriever] Query: 'residual connections attention residual-connections-attention'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (14/30) q14: computational complexity of self attention
+[hybrid_retriever] Query: 'computational complexity of self attention self-attention computational-complexity'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (15/30) q15: parallelization advantage over recurrent models
+[hybrid_retriever] Query: 'parallelization advantage over recurrent models parallelization-advantage-over-recurrent-models'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (16/30) q16: how many encoder layers
+[hybrid_retriever] Query: 'how many encoder layers how-many-encoder-layers'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (17/30) q17: position-wise feed-forward network
+[hybrid_retriever] Query: 'position-wise feed-forward network'
+[score_filter] Dropped 13/20 results below threshold 0.350 (lowest seen: 0.267) query='position-wise feed-forward network'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (18/30) q18: decoder masking future tokens
+[hybrid_retriever] Query: 'decoder masking future tokens decoder-masking-future-tokens'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (19/30) q19: why transformer better than RNN for sequences
+[hybrid_retriever] Query: 'why transformer better than RNN for sequences why-transformer-better-than-rnn-for-sequences'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (20/30) q20: training cost comparison transformer
+[hybrid_retriever] Query: 'training cost comparison transformer training-cost-comparison-transformer'
+[score_filter] Dropped 5/20 results below threshold 0.250 (lowest seen: 0.210) [technical] query='training cost comparison transformer tra'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (21/30) q21: dropout regularization transformer
+[hybrid_retriever] Query: 'dropout regularization transformer dropout-regularization-transformer'
+[score_filter] Dropped 1/20 results below threshold 0.250 (lowest seen: 0.249) [technical] query='dropout regularization transformer dropo'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (22/30) q22: beam search decoding translation
+[hybrid_retriever] Query: 'beam search decoding translation beam-search-decoding-translation'
+[score_filter] Dropped 9/20 results below threshold 0.350 (lowest seen: 0.319) query='beam search decoding translation beam-se'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (23/30) q23: attention visualization figure
+[hybrid_retriever] Query: 'attention visualization figure attention-visualization-figure'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (24/30) q24: multi-head attention output projection
+[hybrid_retriever] Query: 'multi-head attention output projection'
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (25/30) q25: quantum chemistry molecular orbitals
+[hybrid_retriever] Query: 'quantum chemistry molecular orbitals quantum-chemistry-molecular-orbitals'
+[score_filter] Dropped 20/20 results below threshold 0.350 (lowest seen: 0.051) query='quantum chemistry molecular orbitals qua'
+[dense_retriever] No results above threshold 0.350. Lowest score: 0.051
+[hybrid_retriever] Mapped to 0 unique Parent documents.
+[hybrid_retriever] Returned top 0 reranked Parent documents.
+[ragas_batch] (26/30) q26: stock market day trading strategy
+[hybrid_retriever] Query: 'stock market day trading strategy stock-market-day-trading-strategy'
+[score_filter] Dropped 20/20 results below threshold 0.350 (lowest seen: 0.033) query='stock market day trading strategy stock-'
+[dense_retriever] No results above threshold 0.350. Lowest score: 0.033
+[hybrid_retriever] Mapped to 0 unique Parent documents.
+[hybrid_retriever] Returned top 0 reranked Parent documents.
+[ragas_batch] (27/30) q27: recipe for pasta carbonara
+[hybrid_retriever] Query: 'recipe for pasta carbonara recipe-for-pasta-carbonara'
+[score_filter] Dropped 20/20 results below threshold 0.350 (lowest seen: 0.101) query='recipe for pasta carbonara recipe-for-pa'
+[dense_retriever] No results above threshold 0.350. Lowest score: 0.101
+[hybrid_retriever] Mapped to 12 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 6 reranked Parent documents.
+[ragas_batch] (28/30) q28: django middleware request pipeline
+[hybrid_retriever] Query: 'django middleware request pipeline django-middleware-request-pipeline'
+[score_filter] Dropped 20/20 results below threshold 0.350 (lowest seen: 0.088) query='django middleware request pipeline djang'
+[dense_retriever] No results above threshold 0.350. Lowest score: 0.088
+[hybrid_retriever] Mapped to 0 unique Parent documents.
+[hybrid_retriever] Returned top 0 reranked Parent documents.
+[ragas_batch] (29/30) q29: international climate policy agreements
+[hybrid_retriever] Query: 'international climate policy agreements international-climate-policy-agreements'
+[score_filter] Dropped 20/20 results below threshold 0.350 (lowest seen: 0.092) query='international climate policy agreements '
+[dense_retriever] No results above threshold 0.350. Lowest score: 0.092
+[hybrid_retriever] Mapped to 2 unique Parent documents.
+[hybrid_retriever] Reranking Parents with CrossEncoder...
+[hybrid_retriever] Returned top 2 reranked Parent documents.
+[ragas_batch] (30/30) q30: photosynthesis light reactions chloroplast
+[hybrid_retriever] Query: 'photosynthesis light reactions chloroplast photosynthesis-light-reactions-chloroplast'
+[score_filter] Dropped 20/20 results below threshold 0.350 (lowest seen: 0.080) query='photosynthesis light reactions chloropla'
+[dense_retriever] No results above threshold 0.350. Lowest score: 0.080
+[hybrid_retriever] Mapped to 0 unique Parent documents.
+[hybrid_retriever] Returned top 0 reranked Parent documents.
+
+=== RAGAS Batch Evaluation ===
+Mode:           full_proxy
+Queries:        30
+Threshold:      0.35
+Elapsed:        179.99s
+
+--- Retrieval (labeled golden set) ---
+Precision:      92.00%  (TP=23 FP=2)
+Recall:         95.83%  (TP=23 FN=1)
+F1:             93.88%
+Hit@k in-domain:95.83%
+Off-topic block:66.67%
+
+--- RAGAS proxies (LLM-as-judge) ---
+Model:             gemini-2.0-flash
+Context relevancy: 93.75% (n=24)
+
+Orchestrator report: /Users/raju/Downloads/AGENTIC-AI-main/research_assistant/evaluation/orchestrator_report.json
