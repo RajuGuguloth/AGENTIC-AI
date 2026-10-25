@@ -82,6 +82,8 @@ class Config:
     OPENAI_API_KEY: Optional[str] = _strip_env(os.getenv("OPENAI_API_KEY"))
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     OPENAI_BASE_URL: Optional[str] = os.getenv("OPENAI_BASE_URL")
+    VISION_PROVIDER: str = os.getenv("VISION_PROVIDER", "auto").lower()
+    VISION_MODEL: Optional[str] = os.getenv("VISION_MODEL")
 
     @classmethod
     def get_effective_retrieval_threshold(cls, query: str = "") -> float:

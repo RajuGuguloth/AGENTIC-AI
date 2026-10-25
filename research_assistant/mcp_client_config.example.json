@@ -1,0 +1,16 @@
+{
+  "_comment": "Template for an MCP client. Replace paths and provide the same RAG_API_KEY used by the FastAPI service. See MCP_README.md.",
+  "mcpServers": {
+    "agentic-rag": {
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "${workspaceFolder}/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "RAG_API_URL": "http://127.0.0.1:7860",
+        "RAG_API_KEY": "${env:RAG_API_KEY}"
+      }
+    }
+  }
+}

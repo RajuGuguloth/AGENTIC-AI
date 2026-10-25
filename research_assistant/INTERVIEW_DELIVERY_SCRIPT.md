@@ -12,7 +12,7 @@
 - [ ] My headline metric: **93.9% retrieval F1** on 30-query golden set (one paper corpus)
 - [ ] My differentiator: **LLM-as-judge** before AND after generation
 - [ ] I did **not** use LangGraph — custom asyncio + LangChain
-- [ ] Honest gap: faithfulness % not fully measured (API quota); 2 production traces
+- [ ] Honest gap: no native RAGAS answer-quality score yet (Gemini 503); 2 historical production traces
 
 ---
 
@@ -123,9 +123,9 @@
 >
 > *Results on the Transformer index: **retrieval F1 ninety-three point nine percent**, **in-domain Hit@k ninety-five point eight**, **precision ninety-two percent**. Context relevancy proxy at reranker threshold: **ninety-three point eight**.*
 >
-> *`eval_orchestrator.py` runs Validator, Monitor, Decision, Executor — if Gemini quota is exhausted, it auto-falls back to proxy-judge mode instead of failing silently.*
+> *`eval_orchestrator.py` runs Validator, Monitor, Decision, Executor — if the Gemini API probe is unavailable, it can select proxy-judge mode for the custom batch evaluator.*
 >
-> *`daily_eval.py` reads production traces for pass rate, regeneration rate, empty retrieval. Honest gap: only two live traces so far — faithfulness on all thirty queries blocked by free-tier quota. I report what I measured."*
+> *`daily_eval.py` reads production traces for pass rate, regeneration rate, and empty retrieval. Honest gap: only two saved live traces were available in the historical report, and native RAGAS answer-quality evaluation has not completed because Gemini generation returned 503 errors. I report only what I measured."*
 
 ---
 
@@ -135,7 +135,7 @@
 >
 > ***Latency vs accuracy:*** full chat uses eight to twelve Gemini calls per question — I saw seventeen to forty seconds end-to-end in traces. I prioritized validation over speed. In production I'd add **conditional reranking** — skip CrossEncoder when FAISS and BM25 agree — and batch judges.*
 >
-> ***Latency vs cost:*** judges burn free-tier quota — twenty calls a day. That's why simple summarize exists and why the orchestrator has proxy mode.*
+> ***Latency vs cost:*** judge and generation calls add latency and are subject to provider availability and rate limits. That's why the orchestrator also supports a proxy mode.*
 >
 > ***Accuracy vs corpus size:*** eighty chunks, one paper. Retrieval metrics are strong in-domain; multi-document and ACL filtering would be the next enterprise layer.*
 >
@@ -190,7 +190,7 @@
 | "golden set regression" | offline eval |
 | "fail closed" | judge API error → reject chunk |
 | "bounded agent orchestration" | planner + parallel agents |
-| "RAGAS-aligned metrics" | eval (not official RAGAS lib) |
+| "RAGAS-aligned metrics" | Retrieval scores are custom; native runner exists but has no successful answer-quality scores yet |
 | "production-oriented prototype" | honest scale caveat |
 
 ---
@@ -219,7 +219,7 @@
 | Question | Answer |
 |----------|--------|
 | Cost per request? | ~0.07 cents chat typical on Gemini Flash paid; eight to twelve API calls; retrieval is local and free |
-| Biggest weakness? | Single-paper index; faithfulness not fully scored; few production traces |
+| Biggest weakness? | Single-paper index; no native faithfulness score yet; few production traces |
 | Prove better than vanilla RAG? | Ablation: dense only → hybrid → plus rerank → plus relevance judge → plus groundedness; report F1 and pass rate at each layer |
 | Multi-tenant? | Not built; would add metadata ACL pre-filter in index and per-tenant shards |
 | Prompt injection? | Untrusted PDF is untrusted prompt; mitigations: groundedness, injection test cases in golden set |
@@ -231,7 +231,7 @@
 
 1. **Slow down on metrics** — "ninety-three point nine percent **retrieval** F1" (emphasize retrieval)
 2. **Draw the 3 layers** — interviewers remember diagrams
-3. **Say one honest gap unprompted** — builds trust ("faithfulness pending quota")
+3. **Say one honest gap unprompted** — builds trust ("native faithfulness score unavailable; Gemini returned 503")
 4. **Don't apologize** for prototype scale — say "architecture is production-oriented"
 5. **End with a question** — "retrieval, verification, or eval?"
 6. **If nervous** — use 2-minute version first, ask "want the full ten-minute architecture walk?"

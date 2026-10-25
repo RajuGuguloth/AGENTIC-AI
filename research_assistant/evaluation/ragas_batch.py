@@ -143,10 +143,11 @@ def _is_daily_quota_error(message: str) -> bool:
 def _rpm_retry_seconds(message: str, default: float = 45.0) -> float:
     """Parse retry_delay from Gemini 429 when available."""
     import re
-    match = re.search(r"retry in (\d+(?:\.\d+)?)s", lower := (message or "").lower())
+    lower = (message or "").lower()
+    match = re.search(r"retry in (\d+(?:\.\d+)?)s", lower)
     if match:
         return float(match.group(1)) + 2.0
-    match = re.search(r"seconds:\s*(\d+)", message or "")
+    match = re.search(r"seconds:\s*(\d+)", lower)
     if match:
         return float(match.group(1)) + 2.0
     return default
@@ -159,8 +160,8 @@ async def _grade_relevance(
     *,
     judge_k: int = 2,
     api_delay: float = 0.0,
-) -> Tuple[int, int]:
-    passed = 0
+) -> Tuple[int, int, List]:
+    passed_docs: List = []
     to_judge = docs[:judge_k]
     for doc in to_judge:
         cosine = doc.metadata.get("retrieval_score")
@@ -178,10 +179,10 @@ async def _grade_relevance(
                 raise
             ok = False
         if ok:
-            passed += 1
+            passed_docs.append(doc)
         if api_delay > 0:
             await asyncio.sleep(api_delay)
-    return passed, len(to_judge)
+    return len(passed_docs), len(to_judge), passed_docs
 
 
 async def _generate_and_check_faithfulness(
@@ -281,11 +282,17 @@ async def evaluate_one(
 
     if full and proxy_judge and docs and item.get("expect_retrieval"):
         to_judge = docs[:judge_k]
-        rel_passed = sum(
-            1 for d in to_judge
-            if (d.metadata.get("reranker_score") or 0) >= reranker_threshold
-            or (d.metadata.get("retrieval_score") or 0) >= threshold
-        )
+
+        def _passes_proxy(d) -> bool:
+            rr = d.metadata.get("reranker_score")
+            rs = d.metadata.get("retrieval_score")
+            if rr is not None and rr >= reranker_threshold:
+                return True
+            if rs is not None and rs >= threshold:
+                return True
+            return False
+
+        rel_passed = sum(1 for d in to_judge if _passes_proxy(d))
         row["relevance_passed"] = rel_passed
         row["relevance_total"] = len(to_judge)
         row["proxy_judge"] = True
@@ -294,17 +301,17 @@ async def evaluate_one(
 
     elif full and verifier and docs and item.get("expect_retrieval"):
         try:
-            rel_passed, rel_total = await _grade_relevance(
+            rel_passed, rel_total, passed_docs = await _grade_relevance(
                 verifier, query, docs, judge_k=judge_k, api_delay=api_delay
             )
             row["relevance_passed"] = rel_passed
             row["relevance_total"] = rel_total
 
-            if rel_passed > 0 and llm is not None:
+            if passed_docs and llm is not None:
                 if api_delay > 0:
                     await asyncio.sleep(api_delay)
                 faith = await _generate_and_check_faithfulness(
-                    llm, verifier, query, docs[: min(rel_passed, 3)]
+                    llm, verifier, query, passed_docs[:3]
                 )
                 row.update(faith)
                 if api_delay > 0 and faith.get("faithfulness_evaluated"):
@@ -420,6 +427,7 @@ async def run_batch(
             pass
         rows.append(row)
 
+    effective_api_delay = api_delay if (full and not proxy_judge) else 0.0
     summary = {
         "mode": "full_proxy" if (full and proxy_judge) else ("full" if full else "retrieval_only"),
         "golden_count": len(golden),
@@ -427,7 +435,7 @@ async def run_batch(
         "quota_exhausted": quota_exhausted,
         "threshold": threshold,
         "judge_k": judge_k if full else None,
-        "api_delay_sec": api_delay if full else None,
+        "api_delay_sec": effective_api_delay if full else None,
         "gemini_model": Config.GEMINI_MODEL if full else None,
         "elapsed_sec": round(time.time() - started, 2),
         "retrieval": aggregate_retrieval_metrics(
@@ -535,7 +543,37 @@ def main() -> None:
         action="store_true",
         help="Use reranker/cosine proxy for context relevancy (no Gemini API)",
     )
+    parser.add_argument(
+        "--ragas-native",
+        action="store_true",
+        help="Run the real ragas library (faithfulness, answer_relevancy, "
+        "context_precision, context_recall, answer_correctness). "
+        "Uses --golden for the dataset; entries with ground_truth unlock the "
+        "reference-based metrics.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=5,
+        help="Chunks per query passed to ragas in --ragas-native mode (default 5)",
+    )
     args = parser.parse_args()
+
+    if args.ragas_native:
+        from evaluation.ragas_native import run_ragas_native, _write_results, _print_report
+
+        bundle = asyncio.run(
+            run_ragas_native(
+                args.golden,
+                args.index,
+                limit=args.limit,
+                top_k=args.top_k,
+            )
+        )
+        _write_results(bundle, args.output)
+        _print_report(bundle["summary"])
+        print(f"\nResults written to {args.output}")
+        return
 
     golden = load_golden(args.golden)
     rows, summary = asyncio.run(

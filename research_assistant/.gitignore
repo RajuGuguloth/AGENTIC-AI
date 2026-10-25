@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 venv/
+.venv*/
 env/
 ENV/
 
@@ -32,4 +33,3 @@ Thumbs.db
 # FAISS indices (if saved)
 *.index
 *.faiss
-

@@ -31,14 +31,14 @@ Is the context useful for answering the question?
 
 Answer (YES/NO):"""
 
-GROUNDEDNESS_PROMPT = """You are a hallucination detector. Answer ONLY 'YES' or 'NO'.
+GROUNDEDNESS_PROMPT = """You are a groundedness grader. Answer ONLY 'YES' or 'NO'.
 
 Context: {context}
 Answer: {answer}
 
-Does the answer contain ANY information NOT in the context?
-- If answer has info NOT in context → NO
-- If answer is fully supported → YES
+Is every factual claim in the Answer directly supported by the Context?
+- YES if all claims in the Answer are supported by the Context.
+- NO if the Answer contains ANY claim that is not supported by the Context.
 
 Answer (YES/NO):"""
 
@@ -57,11 +57,7 @@ def _default_safety_settings() -> Dict[HarmCategory, HarmBlockThreshold]:
 
 def _parse_yes_no(text: str) -> bool:
     normalized = (text or "").strip().upper()
-    if re.search(r"\bYES\b", normalized):
-        return True
-    if re.search(r"\bNO\b", normalized):
-        return False
-    return False
+    return normalized == "YES"
 
 
 def _is_daily_quota_error(message: str) -> bool:
@@ -208,11 +204,28 @@ class GeminiVerifier:
         )
         try:
             text = await self._generate_with_retry(prompt)
-            return _parse_yes_no(text)
+            normalized = (text or "").strip().upper()
+            if normalized not in {"YES", "NO"}:
+                self._last_metadata = {
+                    **self._last_metadata,
+                    "verification_status": "UNVERIFIED_BYPASS",
+                    "verification_error": "Verifier returned invalid yes/no output",
+                }
+                return False
+            self._last_metadata = {
+                **self._last_metadata,
+                "verification_status": "VERIFIED" if normalized == "YES" else "NOT_GROUNDED",
+            }
+            return _parse_yes_no(normalized)
         except GeminiQuotaExhaustedError:
             raise
         except Exception as exc:
             print(f"[gemini_verifier] Groundedness check failed (fail-closed): {exc}")
+            self._last_metadata = {
+                **self._last_metadata,
+                "verification_status": "UNVERIFIED_BYPASS",
+                "verification_error": str(exc),
+            }
             return False
 
     async def verify_batch(

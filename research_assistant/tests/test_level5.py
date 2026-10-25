@@ -4,12 +4,14 @@ Run: python -m pytest tests/test_level5.py -v
   or: python tests/test_level5.py
 """
 
+import asyncio
 import json
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -43,7 +45,20 @@ class TestThresholdOptimizer(unittest.TestCase):
 
         low = _compute_metrics_for_threshold(traces, feedback, 0.50)
         high = _compute_metrics_for_threshold(traces, feedback, 0.25)
-        self.assertGreaterEqual(high["recall_at_5"], low["recall_at_5"])
+        self.assertGreaterEqual(high["feedback_recall"], low["feedback_recall"])
+
+    def test_optimizer_skips_when_no_traces_have_feedback(self):
+        from optimization import threshold_optimizer
+
+        trace = {"trace_id": "unrated", "chunks_scores": [{"score": 0.4}]}
+        with patch.object(
+            threshold_optimizer,
+            "load_jsonl",
+            side_effect=[[trace], []],
+        ):
+            result = threshold_optimizer.optimize_threshold()
+
+        self.assertEqual(result, {"status": "skipped", "reason": "no_rated_feedback"})
 
 
 class TestUserMemory(unittest.TestCase):
@@ -110,6 +125,90 @@ class TestQueryCache(unittest.TestCase):
         self.assertEqual(hit, [{"doc": 1}])
         cache.invalidate("test query")
         self.assertIsNone(cache.get("test query"))
+
+    def test_cache_separates_retrieval_top_k_and_clears(self):
+        from retrieval.query_cache import QueryCache
+
+        cache = QueryCache(ttl_seconds=60)
+        cache.set("same query", [{"k": 5}], extra="hybrid:k=5")
+        self.assertEqual(cache.get("same query", extra="hybrid:k=5"), [{"k": 5}])
+        self.assertIsNone(cache.get("same query", extra="hybrid:k=10"))
+
+        cache.clear()
+        self.assertIsNone(cache.get("same query", extra="hybrid:k=5"))
+
+
+class TestDeepReadConcurrency(unittest.IsolatedAsyncioTestCase):
+    async def test_section_calls_are_limited_to_three(self):
+        from orchestration.deep_read import section_agents
+
+        active = 0
+        peak = 0
+        original = section_agents.analyze_section
+
+        async def tracked_analyze(spec, doc, gateway):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+            return section_agents.SectionResult(spec["id"], spec["title"], "ok")
+
+        section_agents.analyze_section = tracked_analyze
+        try:
+            results = await section_agents.analyze_all_sections(object(), object())
+        finally:
+            section_agents.analyze_section = original
+
+        self.assertEqual(len(results), 6)
+        self.assertLessEqual(peak, 3)
+
+    async def test_section_failure_does_not_return_a_success_shaped_report(self):
+        from orchestration.deep_read import section_agents
+
+        original = section_agents.analyze_section
+
+        async def fail_one_section(spec, doc, gateway):
+            if spec["id"] == "method":
+                raise RuntimeError("provider unavailable")
+            return section_agents.SectionResult(spec["id"], spec["title"], "ok")
+
+        section_agents.analyze_section = fail_one_section
+        try:
+            with self.assertRaisesRegex(RuntimeError, "provider unavailable"):
+                await section_agents.analyze_all_sections(object(), object())
+        finally:
+            section_agents.analyze_section = original
+
+
+class TestVerifierFailureState(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_verifier_output_is_marked_unverified(self):
+        from verification.gemini_verifier import GeminiVerifier
+
+        class InvalidOutputModel:
+            def generate_content(self, prompt):
+                return type("Response", (), {"text": "YES, probably"})()
+
+        verifier = GeminiVerifier(InvalidOutputModel())
+        self.assertFalse(await verifier.is_grounded("answer", "context"))
+        self.assertEqual(
+            verifier.last_metadata["verification_status"],
+            "UNVERIFIED_BYPASS",
+        )
+
+    async def test_verifier_exception_is_marked_unverified(self):
+        from verification.gemini_verifier import GeminiVerifier
+
+        class FailingModel:
+            def generate_content(self, prompt):
+                raise TimeoutError("verification timed out")
+
+        verifier = GeminiVerifier(FailingModel())
+        self.assertFalse(await verifier.is_grounded("answer", "context"))
+        self.assertEqual(
+            verifier.last_metadata["verification_status"],
+            "UNVERIFIED_BYPASS",
+        )
 
 
 class TestSelfHealer(unittest.TestCase):

@@ -41,6 +41,7 @@ class ExtractedPage:
     page_num: int
     text: str
     screenshot_path: Optional[str] = None
+    vision_analysis: str = ""
 
 
 @dataclass
@@ -61,8 +62,11 @@ class RichPDFDocument:
         pattern = re.compile("|".join(re.escape(k) for k in keywords), re.I)
         chunks = []
         for page in self.pages:
-            if pattern.search(page.text):
-                chunks.append(f"--- Page {page.page_num} ---\n{page.text}")
+            page_text = "\n".join(
+                part for part in (page.text, page.vision_analysis) if part
+            )
+            if pattern.search(page_text):
+                chunks.append(f"--- Page {page.page_num} ---\n{page_text}")
         combined = "\n\n".join(chunks) if chunks else self.full_text
         return combined[:max_chars]
 

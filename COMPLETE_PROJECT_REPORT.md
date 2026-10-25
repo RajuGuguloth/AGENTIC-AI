@@ -46,7 +46,7 @@
 - **Deep-Read** arXiv/PDF into a structured markdown report + PowerPoint
 - **Evaluate** retrieval quality on a 30-query golden set with automated orchestration
 
-The system is **not** a deployed cloud product. It is a **production-oriented prototype**: structured logging, evaluation harness, optimization hooks, unit tests — but small index (~80 chunks, one paper), few live traces, and Gemini API quota limits blocked full faithfulness evaluation.
+The system is **not** a deployed cloud product. It is a **production-oriented prototype**: structured logging, evaluation harness, optimization hooks, and unit tests — but a small index (~80 chunks, one paper), few live traces, and no successful native RAGAS answer-quality scores yet. Recent Gemini generation attempts returned 503 errors.
 
 **Core innovation pattern:** Hybrid retrieval (FAISS + BM25 + RRF + CrossEncoder rerank) + parent-child chunking + **Self-RAG / Corrective RAG** verification (LLM-as-judge before and after generation).
 
@@ -76,7 +76,7 @@ General LLMs answer from training memory and can **hallucinate** on technical PD
 ### Goals Partially Achieved
 | Goal | Status |
 |------|--------|
-| Full RAGAS faithfulness % on 30 queries | ❌ Blocked by Gemini daily quota |
+| Native RAGAS answer-quality scores | ⚠️ Runner implemented; no successful scores yet because Gemini generation returned 503 errors |
 | Stable production verification pass rate | ❌ Only 2 chat traces logged |
 | Multi-document / web-scale index | ❌ Single paper prototype |
 | LangGraph orchestration | ❌ Not implemented |
@@ -228,7 +228,7 @@ app.py — Gradio UI (5 tabs) + FastAPI (port 7860)
 | 16 | Log trace | `gemini_tracer.log_trace()` | `logs/rag_traces.jsonl` |
 
 ### Gemini verifier details (`verification/gemini_verifier.py`)
-- Model: `Config.GEMINI_MODEL` (currently `gemini-2.0-flash` in `.env`)
+- Model: `Config.GEMINI_MODEL` (default `gemini-2.5-flash`; `.env` may override)
 - Judge temperature: **0.1**, max_output_tokens: **32**
 - Prompts: `RELEVANCE_PROMPT`, `GROUNDEDNESS_PROMPT` — YES/NO only
 - Handles `GeminiQuotaExhaustedError` on daily quota 429
@@ -326,9 +326,13 @@ ChartGenerator                  [visualization/chart_generator.py]
 - Hit@k (in-domain)
 - Off-topic block rate
 
-**RAGAS-aligned proxies (not official RAGAS library):**
+**Previously reported custom retrieval/judge proxies (not native RAGAS scores):**
 - Context relevancy rate (proxy: reranker score)
 - Faithfulness rate (requires full LLM judge — often blocked)
+
+The native RAGAS runner is now available at `evaluation/ragas_native.py`.
+It has not produced a successful answer-quality report yet; earlier Gemini
+generation attempts returned 503 errors.
 
 ### 10.3 Eval Orchestrator (`evaluation/eval_orchestrator.py`)
 
@@ -481,11 +485,11 @@ research_assistant/
 | Language | Python 3 | Everything |
 | UI | Gradio 4+ | Web tabs, chat, file upload |
 | API | FastAPI + Uvicorn | Feedback endpoint, mount Gradio |
-| LLM (primary) | Google Gemini (`gemini-2.0-flash` in .env) | Generation + verification |
+| LLM (primary) | Perplexity by default; Gemini or Ollama configurable | Generation + verification |
 | LLM alt | Perplexity, Ollama | Configurable via `LLM_BACKEND` |
 | LLM framework | LangChain | Prompts, chains, structured output |
 | **NOT used** | **LangGraph** | Not in project code |
-| **NOT used** | **Official RAGAS Python package** | Custom RAGAS-aligned metrics only |
+| Evaluation | Official RAGAS Python package | Native runner added; no successful answer-quality scores recorded yet |
 | Embeddings | SentenceTransformer `all-MiniLM-L6-v2` | Dense vectors (local, free) |
 | Vector DB | FAISS `IndexFlatIP` dim=512 | Similarity search (local) |
 | Keyword search | BM25Okapi (`rank_bm25`) | Sparse retrieval (local) |
@@ -507,8 +511,8 @@ From `config.py` and `.env` (defaults shown; `.env` may override):
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `LLM_BACKEND` | gemini | Primary LLM |
-| `GEMINI_MODEL` | gemini-2.0-flash | Generation + judges |
+| `LLM_BACKEND` | perplexity | Primary LLM (default) |
+| `GEMINI_MODEL` | gemini-2.5-flash | Used when Gemini is selected |
 | `EMBEDDING_MODEL` | all-MiniLM-L6-v2 | Dense embeddings |
 | `TOP_K_DENSE` | 20 | FAISS candidates |
 | `TOP_K_SPARSE` | 20 | BM25 candidates |
@@ -529,7 +533,7 @@ From `config.py` and `.env` (defaults shown; `.env` may override):
 
 ## 15. Measured Results (Only Defensible Numbers)
 
-**Source:** `evaluation/orchestrator_report.json` and `evaluation/ragas_results_full.jsonl`  
+**Source:** Historical `evaluation/orchestrator_report.json` and `evaluation/ragas_results_full.jsonl` snapshot
 **Mode:** `full_proxy` (reranker-based context relevancy proxy; **no LLM faithfulness judge**)  
 **Corpus:** Single indexed Transformer paper (`1706.03762v7.pdf`)  
 **Date:** Last orchestrator run in repo
@@ -617,7 +621,7 @@ From `config.py` and `.env` (defaults shown; `.env` may override):
 | Claim | Truth |
 |-------|-------|
 | "Uses LangGraph" | **NO** — not in project source code |
-| "Uses official RAGAS library" | **NO** — custom RAGAS-aligned metrics |
+| "Uses official RAGAS library" | **Yes, a native evaluator is implemented; no successful native answer-quality scores yet** |
 | "Deployed to production cloud" | **NO** — local Gradio app |
 | "93.9% answer accuracy" | **NO** — that is **retrieval F1**, not answer quality |
 | "Proven hallucination reduction %" | **NO** — mechanism exists, metric not measured |
@@ -639,7 +643,7 @@ pip install -r requirements_level5.txt   # optional Level 5
 # Configure .env (never commit)
 # LLM_BACKEND=gemini
 # GEMINI_API_KEY=AIza...   (Google AI Studio key)
-# GEMINI_MODEL=gemini-2.0-flash
+# GEMINI_MODEL=gemini-2.5-flash
 
 # Run app
 python app.py
@@ -647,6 +651,9 @@ python app.py
 
 # Offline retrieval eval (no API)
 python evaluation/ragas_batch.py
+
+# Native RAGAS answer-quality eval (provider API calls)
+python evaluation/ragas_native.py --golden evaluation/golden_set_ragas.json
 
 # Full eval with proxy judge (30 queries, no API judges)
 python evaluation/ragas_batch.py --full --proxy-judge
@@ -684,7 +691,7 @@ python observability/self_healer.py
 | Parallel agentic sub-queries | ✅ | planner + asyncio.gather |
 | "Reduce hallucinations" (measured) | ❌ | Mechanism yes, % no |
 | LangGraph | ❌ | Not used |
-| Official RAGAS | ❌ | Aligned concepts only |
+| Native RAGAS evaluation | ⚠️ | Runner added; no successful answer-quality scores yet |
 | Production deployed | ❌ | Prototype |
 | Multimodal CLIP | ✅ | Code exists; text path is primary |
 | Self-healing + A/B prompts | ⚠️ | Implemented, lightly validated |

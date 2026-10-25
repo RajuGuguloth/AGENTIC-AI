@@ -242,8 +242,9 @@ Your project measures quality in **layers** — like a health checkup:
 | **Retrieval** | Did we find the right PDF sections? | `ragas_batch.py`, cosine scores |
 | **Relevance** | Are retrieved chunks actually about the question? | `GeminiVerifier.is_relevant()` |
 | **Faithfulness / Groundedness** | Is the answer supported by those chunks? | `GeminiVerifier.is_grounded()` |
+| **Native RAGAS answer quality** | Faithfulness, answer relevancy, context metrics | `ragas_native.py` (runner implemented; no successful scores yet) |
 | **Production monitoring** | Pass rate, latency, user thumbs | `daily_eval.py` |
-| **Threshold tuning** | Best cosine cutoff (Precision@5, F1) | `threshold_optimizer.py` |
+| **Threshold tuning** | Feedback-based query acceptance metrics (F1) | `threshold_optimizer.py` |
 | **Self-healing** | Auto-fix when metrics drop | `self_healer.py` |
 | **Offline golden set** | 30 labeled test questions | `golden_set.json` + `ragas_batch.py` |
 
@@ -255,7 +256,7 @@ Your project measures quality in **layers** — like a health checkup:
 | In-domain Hit@k | **95.8%** |
 | Precision | **92%** |
 | Context relevancy (reranker proxy) | **93.8%** |
-| Faithfulness (LLM judge) | Needs Gemini quota (free tier: 20 calls/day) |
+| Native RAGAS answer-quality metrics | Not available yet; recent Gemini generation attempts returned 503 errors |
 
 ### Run evaluation yourself
 

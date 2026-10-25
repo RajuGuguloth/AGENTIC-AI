@@ -13,6 +13,7 @@ from config import Config
 from observability.gemini_tracer import log_trace, new_trace_id, serialize_retrieved_docs
 from orchestration.simple_summarizer import format_llm_error
 from retrieval.hybrid_retriever import HybridRetriever
+from retrieval.runtime import get_runtime_lock
 
 try:
     from retrieval.query_utils import normalize_technical_query
@@ -48,6 +49,39 @@ def _message_text(msg) -> Tuple[str, str]:
     if isinstance(msg, (list, tuple)) and len(msg) == 2:
         return "user", str(msg[0])
     return "user", str(msg)
+
+
+def _extract_answer_text(response) -> str:
+    """
+    Coerce a LangChain ChatModel response into a plain string.
+
+    Some Gemini models (e.g. gemini-flash-latest with thinking mode) return
+    `response.content` as a list of parts — each part a dict {"type": "text", "text": "..."}
+    or an object with a `.text` attribute — instead of a plain string.
+    Older / simpler models return a string directly. This helper normalises both.
+    """
+    content = getattr(response, "content", response)
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                # Common shape: {"type": "text", "text": "..."}
+                text = item.get("text") or item.get("content") or ""
+                if text:
+                    parts.append(str(text))
+            else:
+                text = getattr(item, "text", None) or getattr(item, "content", None)
+                if text:
+                    parts.append(str(text))
+        return "".join(parts)
+
+    return str(content)
 
 
 def _format_history(history: ChatHistory, max_turns: int = 6) -> str:
@@ -153,7 +187,7 @@ async def _regenerate_until_grounded(
                 "question": question,
             }
         )
-        answer = response.content if hasattr(response, "content") else str(response)
+        answer = _extract_answer_text(response)
         grounded = await verifier.is_grounded(answer, strict_context)
         gemini_metadata = verifier.last_metadata
         attempts_log.append({"attempt": retry_idx + 1, "grounded": grounded})
@@ -161,6 +195,10 @@ async def _regenerate_until_grounded(
     verification_results["grounded"] = grounded
     verification_results["grounded_attempts"] = attempts_log
     verification_results["regeneration_count"] = max(0, len(attempts_log) - 1)
+    verification_results["grounded_status"] = gemini_metadata.get(
+        "verification_status",
+        "VERIFIED" if grounded else "NOT_GROUNDED",
+    )
     if grounded and len(attempts_log) > 1:
         verification_results["grounded_after_retry"] = True
     return answer, grounded, gemini_metadata
@@ -201,7 +239,12 @@ async def answer_document_question(
         search_query = normalize_technical_query(search_query)
 
     loop = asyncio.get_event_loop()
-    docs: List = await loop.run_in_executor(None, retriever.search, search_query)
+
+    def search_with_lock():
+        with get_runtime_lock():
+            return retriever.search(search_query)
+
+    docs: List = await loop.run_in_executor(None, search_with_lock)
     retrieved_docs: List = list(docs)
 
     if not docs:
@@ -340,7 +383,7 @@ async def answer_document_question(
             "question": question,
         }
     )
-    answer = response.content if hasattr(response, "content") else str(response)
+    answer = _extract_answer_text(response)
 
     if verifier:
         answer, grounded, gemini_metadata = await _regenerate_until_grounded(
@@ -357,6 +400,13 @@ async def answer_document_question(
                 f"[document_chat] Groundedness failed after {Config.MAX_RETRIES} attempts "
                 f"(trace_id={trace_id})"
             )
+            if verification_results.get("grounded_status") == "UNVERIFIED_BYPASS":
+                answer = (
+                    "⚠️ **Groundedness could not be verified** because the verification "
+                    "service failed or returned an invalid response. Treat this answer as "
+                    "unverified.\n\n"
+                    f"{answer}"
+                )
 
     if HAS_PROMPT_OPTIMIZER and Config.LEVEL5_ENABLED:
         grounded_ok = verification_results.get("grounded", True)

@@ -187,36 +187,54 @@ async def research_sub_query(
     parts = []
     for doc in relevant_docs:
         if doc.metadata.get("content_type") == "table":
-            parts.append(f"[TABLE from {doc.metadata['source']}]\n{doc.page_content}")
+            source = doc.metadata.get("source", "Unknown")
+            parts.append(f"[TABLE from {source}]\n{doc.page_content}")
         else:
             parts.append(doc.page_content)
     context_text = "\n\n---\n\n".join(parts)
-    
+
     # 4. Generate Answer
     answer = await agent.answer(sub_query, context_text)
-    
-    # 5. Grade Hallucination
+
+    # 5. Grade Hallucination — regrade after regenerate so we know whether the fix stuck
     is_grounded = await agent.check_hallucination(answer, context_text)
     if not is_grounded:
         print(f"[agent] Hallucination detected for '{sub_query}'. Regenerating...")
-        # Simple fallback for hallucination: append a strict warning and regenerate once
         strict_context = context_text + "\n\nCRITICAL: Do not make up information. Use ONLY the above text."
         answer = await agent.answer(sub_query, strict_context)
-    
+        is_grounded = await agent.check_hallucination(answer, context_text)
+        if not is_grounded:
+            print(f"[agent] Still ungrounded after retry for '{sub_query}'.")
+
     print(f"[agent] Completed research for: '{sub_query}'")
     return {
         "sub_query": sub_query,
         "answer": answer,
-        "sources": [doc.metadata for doc in relevant_docs]
+        "sources": [doc.metadata for doc in relevant_docs],
+        "grounded": is_grounded,
     }
 
 
 async def run_parallel_research(
-    sub_queries: List[str], 
-    llm, 
+    sub_queries: List[str],
+    llm,
     retriever: HybridRetriever
 ) -> List[Dict[str, Any]]:
-    """Run research concurrently."""
+    """Run research concurrently. One sub-query failure does not cancel siblings."""
     agent = SubQueryAgent(llm)
     tasks = [research_sub_query(query, agent, retriever) for query in sub_queries]
-    return await asyncio.gather(*tasks)
+    raw = await asyncio.gather(*tasks, return_exceptions=True)
+    results: List[Dict[str, Any]] = []
+    for query, item in zip(sub_queries, raw):
+        if isinstance(item, Exception):
+            print(f"[agent] Sub-query failed: '{query}' — {item}")
+            results.append({
+                "sub_query": query,
+                "answer": f"Sub-query failed: {item}",
+                "sources": [],
+                "grounded": False,
+                "error": str(item),
+            })
+        else:
+            results.append(item)
+    return results

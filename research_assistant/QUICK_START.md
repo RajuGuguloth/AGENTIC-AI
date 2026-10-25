@@ -1,80 +1,50 @@
 # Quick Start Guide
 
-## 1. Setup (One-time)
+## 1. Install dependencies
 
-The virtual environment has been created and dependencies installed! 
-
-**To activate the virtual environment:**
+From this directory, create and activate a virtual environment, then install
+the project requirements:
 
 ```bash
-cd research_assistant
-source venv/bin/activate
-```
-
-Or use the convenience script:
-```bash
-cd research_assistant
-source activate.sh
-```
-
-**If you need to reinstall dependencies:**
-```bash
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 2. Set API Key
+## 2. Configure an LLM provider
+
+Copy the example configuration and set the API key for the provider you use:
 
 ```bash
-export PERPLEXITY_API_KEY="your-key-here"
+cp .env.example .env
 ```
 
-Or create a `.env` file:
-```
-PERPLEXITY_API_KEY=your-key-here
-```
+The default `LLM_BACKEND` is `perplexity`. You can also configure `gemini` or
+`ollama` in `.env`. Do not commit real API keys.
 
-## 3. Add PDFs
+PDF indexing and Deep-Read also analyze every page image to transcribe
+handwriting and describe charts/diagrams. Configure `VISION_PROVIDER=auto`
+with `OPENAI_API_KEY` or `GEMINI_API_KEY`; set `VISION_MODEL` to override the
+default model. For local-only processing, set `VISION_PROVIDER=ollama` and
+choose a vision-capable model. Cloud provider settings transmit page images to
+that service. If no vision provider is configured, vision-enabled indexing and
+Deep-Read report a configuration error instead of silently skipping analysis.
 
-Place your research papers in the `pdfs/` folder:
-```bash
-mkdir -p pdfs
-# Copy your PDF files to pdfs/
-```
-
-## 4. Run the App
+## 3. Start the application
 
 ```bash
-streamlit run main.py
+python app.py
 ```
 
-## 5. Use the App
+Open [http://localhost:7860](http://localhost:7860). Upload one or more PDFs
+in the interface and build an index before asking research questions.
 
-1. In the sidebar, enter your PDF folder path (default: `./pdfs`)
-2. Click **"Build Index"** - wait for it to complete
-3. Enter a research question in the main area
-4. Click **"Research"** and wait for the answer!
+## Example research questions
 
-## Example Research Questions
+- Summarize the main contributions of these papers.
+- What limitations do the documents mention?
+- Compare the methods proposed in these papers.
+- What datasets were used?
+- What future research directions are suggested?
 
-Try these to get started:
-
-- **"Summarize the main contributions of these papers"**
-- **"What are the key limitations mentioned?"**
-- **"Compare the different methods proposed"**
-- **"What datasets were used in these studies?"**
-- **"What are the future research directions suggested?"**
-
-## Troubleshooting
-
-- **First run is slow**: The embedding model downloads on first use (~80MB)
-- **API key error**: Make sure `PERPLEXITY_API_KEY` is set
-- **No PDFs found**: Check the folder path in the sidebar
-
-## Testing Without PDFs
-
-If you want to test the system but don't have PDFs yet, you can:
-1. Download a sample research paper (e.g., from arXiv)
-2. Save it as `pdfs/sample.pdf`
-3. Build the index and try a question!
-
+For MCP client setup, see [MCP_README.md](MCP_README.md).

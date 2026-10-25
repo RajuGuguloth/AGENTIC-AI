@@ -46,15 +46,17 @@ python app.py
 
 Grid-searches `MIN_RETRIEVAL_SCORE` ∈ [0.25 … 0.50] using weekly traces + feedback.
 
-- **Precision@5**: thumbs-up traces that still retrieve at threshold
-- **Recall@5**: relevance-found traces that survive threshold
+- **Feedback precision/recall**: whether retrieval remains available for
+  positively rated queries while filtering negatively rated ones. These are
+  query-level feedback proxies, not standard chunk-level Precision@5/Recall@5.
 - **F1**: selection metric
 
-Updates `optimization/runtime_config.json` and `.env`. Alerts on Δ > 0.1.
+Optimization is skipped until traces have matching positive or negative user
+feedback. Once feedback exists, the selected threshold updates
+`optimization/runtime_config.json` and `.env`. Alerts on Δ > 0.1.
 
 ```bash
 python optimization/threshold_optimizer.py
-python optimization/threshold_optimizer.py  # dry_run via code: optimize_threshold(dry_run=True)
 ```
 
 ### 2. Cross-Session User Memory
@@ -148,7 +150,7 @@ tail -f optimization/optimization_history.jsonl
 | Too many empty retrievals | Lower `MIN_RETRIEVAL_SCORE` or wait for self-healer |
 | Hallucinations persist | Force prompt optimization: `optimize_prompts(force=True)` |
 | High latency | Enable Redis cache via `REDIS_URL` or self-healer auto-enables |
-| Poor multimodal results | Index image chunks via `universal_loader` + ensure CLIP paths valid |
+| Poor multimodal results | Rebuild the PDF index with page vision enabled and verify `VISION_PROVIDER` / `VISION_MODEL` settings |
 | Rate limits on Gemini | Increase `GEMINI_TOKEN_BUCKET_CAPACITY`, `RETRY_BACKOFF` |
 
 ## Gemini-Specific Notes

@@ -12,7 +12,8 @@ from typing import Callable, Optional, Union
 
 from etl.ingest import ingest_uploaded_file, resolve_to_pdf
 from etl.pdf_rich_loader import RichPDFDocument, extract_rich_pdf
-from llm.gateway import LLMGateway, get_llm_gateway
+from etl.vision_loader import analyze_pdf_pages
+from llm.gateway import LLMGateway, get_llm_gateway, get_vision_gateway
 from orchestration.deep_read.merger import merge_report
 from orchestration.deep_read.ppt_builder import build_ppt
 from orchestration.deep_read.section_agents import analyze_all_sections
@@ -31,6 +32,7 @@ class DeepReadResult:
     figure_count: int
     table_count: int
     page_count: int
+    vision_page_count: int
     latency_sec: float
 
 
@@ -73,7 +75,23 @@ async def run_deep_read(
     progress(0.15, "Extracting text, figures, and tables…")
     doc: RichPDFDocument = extract_rich_pdf(str(pdf_path), str(job_dir / "extracted"))
 
-    progress(0.30, "Analyzing metadata & problem…")
+    progress(0.20, "Analyzing handwriting and page visuals…")
+    vision_results = await analyze_pdf_pages(
+        str(pdf_path),
+        gateway=get_vision_gateway(),
+        progress=lambda fraction, message: progress(
+            0.20 + fraction * 0.10,
+            message,
+        ),
+    )
+    for page in doc.pages:
+        page.vision_analysis = vision_results.get(page.page_num, "")
+    doc.full_text = "\n\n".join(
+        f"[Page {page.page_num}]\n{page.text}\n{page.vision_analysis}".strip()
+        for page in doc.pages
+    )
+
+    progress(0.32, "Analyzing metadata & problem…")
     sections = await analyze_all_sections(doc, gateway)
 
     progress(0.75, "Merging report…")
@@ -100,5 +118,6 @@ async def run_deep_read(
         figure_count=len(doc.figures),
         table_count=len(doc.tables),
         page_count=doc.total_pages,
+        vision_page_count=len(vision_results),
         latency_sec=time.time() - started,
     )

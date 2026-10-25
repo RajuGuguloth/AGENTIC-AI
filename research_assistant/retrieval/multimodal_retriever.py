@@ -160,20 +160,24 @@ class MultimodalRetriever(HybridRetriever):
         from retrieval.query_cache import get_query_cache
 
         cache = get_query_cache()
+        cache_extra = f"hybrid:k={k or Config.TOP_K_FINAL}"
         if cache.enabled:
-            cached = cache.get(query, extra="hybrid")
+            cached = cache.get(query, extra=cache_extra)
             if cached is not None:
                 print(f"[multimodal_retriever] Cache hit for '{query[:40]}...'")
-                return cached
+                return [
+                    Document(
+                        page_content=d["page_content"],
+                        metadata=dict(d.get("metadata") or {}),
+                    )
+                    for d in cached
+                ]
 
         docs = super().search(query, k=k)
         if cache.enabled:
             serializable = [
-                {"page_content": d.page_content, "metadata": d.metadata} for d in docs
+                {"page_content": d.page_content, "metadata": dict(d.metadata)}
+                for d in docs
             ]
-            cache.set(query, serializable, extra="hybrid")
-            docs = [
-                Document(page_content=d["page_content"], metadata=d["metadata"])
-                for d in serializable
-            ]
+            cache.set(query, serializable, extra=cache_extra)
         return docs

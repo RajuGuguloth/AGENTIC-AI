@@ -14,7 +14,7 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 >
 > For complex goals, a **planner splits research into sub-queries** and **parallel agents** retrieve, verify, and answer independently, then synthesize a report. A separate **Deep-Read** pipeline generates a structured report and PowerPoint from arXiv links.
 >
-> On evaluation, I built a **30-query golden set** and measured retrieval **F1 at 93.9%**, **Hit@k at 95.8%**, and **precision at 92%** — plus an orchestrator that runs batch eval and production monitoring. I'm honest about limits: small index today, full faithfulness eval needs more API quota — but the architecture is production-shaped: retrieve, verify, generate, verify, log, tune.
+> On evaluation, I built a **30-query golden set** and measured retrieval **F1 at 93.9%**, **Hit@k at 95.8%**, and **precision at 92%** with custom retrieval metrics. I also added a native RAGAS evaluator, but it has not produced answer-quality scores yet because Gemini generation returned 503 errors. The corpus is small, so I present those results as a retrieval regression check, not a general performance claim.
 
 **Timing:** ~250 words ≈ 2 minutes at normal pace.
 
@@ -44,7 +44,7 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 
 ### 4. "Explain your verification loop. Isn't that expensive?"
 
-> It's a **Self-RAG / Corrective RAG** pattern: relevance judge **before** generation, groundedness judge **after**. Yes, it's more API calls — roughly up to 6 relevance checks plus 1–3 groundedness checks per question. I mitigate cost with: cosine pre-filter at 0.35 so weak chunks skip the judge; exponential backoff on rate limits; and a relevance fallback using reranker score ≥ 0.5 when the judge rejects everything due to API errors. The tradeoff is intentional: I'd rather block or retry than ship a hallucination on a research assistant.
+> It's a **Self-RAG / Corrective RAG** pattern: relevance judge **before** generation, groundedness judge **after**. Yes, it's more API calls — roughly up to 6 relevance checks plus 1–3 groundedness checks per question. I mitigate cost with a cosine pre-filter so weak chunks skip the judge and bounded retries. In document chat, if every chunk is rejected, a fallback selects only the highest-scoring cosine/reranker candidates and records that fallback in the trace; this is a deliberate recall tradeoff, not a verified relevance judgment.
 
 ---
 
@@ -70,19 +70,19 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 
 ### 7. "How did you evaluate this? What numbers can you defend?"
 
-> I built `evaluation/golden_set.json` — **30 labeled queries**, 24 in-domain and 6 off-topic. `ragas_batch.py` replays hybrid retrieval offline and computes:
+> I built `evaluation/golden_set.json` — **30 labeled queries**, 24 in-domain and 6 off-topic. `ragas_batch.py` replays hybrid retrieval offline and computes custom retrieval metrics:
 > - **Retrieval F1: 93.9%**
 > - **Hit@k: 95.8%** (in-domain)
 > - **Precision: 92%**
 > - **Context relevancy proxy: 93.8%** (reranker ≥ 0.5)
 >
-> Production monitoring via `daily_eval.py` reads `rag_traces.jsonl` for pass rate, regeneration rate, empty retrieval, and latency. Full LLM faithfulness on all 30 queries was blocked by Gemini free-tier quota — I report proxy metrics and don't inflate numbers I haven't measured.
+> Production monitoring via `daily_eval.py` reads `rag_traces.jsonl` for pass rate, regeneration rate, empty retrieval, and latency. A native RAGAS runner is implemented, but attempts to generate answers for it returned Gemini 503 errors; I report no native answer-quality scores.
 
 ---
 
 ### 8. "What's your biggest failure mode today?"
 
-> **Empty or weak retrieval** — if nothing passes cosine 0.35 or all chunks fail relevance, the user gets an honest "I can't verify" message instead of a guess. Second: **judge over-rejection** when API fails — I added a fallback to top reranker/cosine docs. Third: **small corpus** — one paper, ~80 chunks — so cross-document reasoning isn't tested yet.
+> **Empty or weak retrieval** — if nothing passes the score filter or all chunks fail relevance, the user gets an honest "I can't verify" message instead of a guess. In document chat, a flagged fallback can select high-scoring cosine/reranker candidates when the judge approves none; this is not a judge pass. A second limitation is the small corpus — one paper, ~80 chunks — so cross-document reasoning isn't tested yet.
 
 ---
 
@@ -94,7 +94,7 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 
 ### 10. "How do FAISS cosine scores and reranker scores differ?"
 
-> FAISS uses **bi-encoder** embeddings — query and document encoded separately, cosine similarity in [0, 1]. CrossEncoder outputs a **relevance logit** on a different scale. I had a real bug where the relevance judge applied the 0.35 threshold to reranker scores. I fixed it: cosine threshold only on `retrieval_score` from FAISS; reranker used for ranking and fallback at ≥ 0.5. They're stored separately in trace logs.
+> FAISS uses **bi-encoder** embeddings — query and document encoded separately, cosine similarity. CrossEncoder outputs a **relevance logit** on a different scale. The cosine threshold applies to `retrieval_score` from FAISS; reranker scores are kept separate and used for ranking, including the explicitly flagged document-chat fallback.
 
 ---
 
@@ -107,7 +107,7 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 ### 12. "What would you improve with another month?"
 
 > 1. **Multi-document indexes** with metadata filters (author, year, section).
-> 2. **Answer relevancy** metric — the RAGAS dimension I don't fully score yet.
+> 2. **Answer relevancy** — the native RAGAS runner includes this metric, but no successful native score has been produced yet.
 > 3. **Link user feedback to trace_id** for human-in-the-loop prompt and threshold tuning.
 > 4. **Full faithfulness eval** on paid Gemini tier across the golden set.
 > 5. **Agent path logging** — Research mode doesn't write to `rag_traces.jsonl` today; I'd unify observability.
@@ -139,11 +139,11 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 | Stack | Python, Gradio, FastAPI, FAISS, BM25, SentenceTransformers, CrossEncoder, Gemini |
 | Index | Parent 1500 chars, semantic children, MiniLM-L6-v2, FAISS dim=512 |
 | Retrieve | top_k_dense=20, top_k_sparse=20, RRF k=60, rerank, top_k_final=6 |
-| Threshold | cosine ≥ 0.35 (0.25 technical), reranker fallback ≥ 0.5 |
+| Threshold | cosine ≥ 0.35 (0.25 technical); document-chat fallback can use high reranker/cosine scores when the judge approves none |
 | Verify | relevance per chunk → generate → groundedness, max 3 retries |
 | Metrics | F1 93.9%, Hit@k 95.8%, Precision 92%, context proxy 93.8% |
 | Agentic | Planner + parallel SubQueryAgents; Deep-Read section agents |
-| Honest gap | Single-paper index; full faithfulness eval quota-limited |
+| Honest gap | Single-paper index; no native RAGAS answer-quality scores yet (Gemini returned 503) |
 
 ---
 
@@ -181,8 +181,9 @@ Use this with `PROJECT_GUIDE.md` and the 10-minute script from chat. Practice ou
 | Answer generation | Gemini via LangChain, max_output=1200 | **Paid per call** |
 | Groundedness judge | Gemini `generate_content`, max_output=32 | **Paid per call** |
 
-**Gemini 2.0 Flash paid pricing (Google AI):** $0.10 / 1M input tokens, $0.40 / 1M output tokens.  
-**Free tier:** $0 monetary cost, but strict daily/RPM quotas (your project hit **daily_quota_exhausted** at ~20 calls/day).
+**Pricing and quotas:** Provider pricing and limits vary by model and account.
+Recent evaluation attempts returned Gemini 503 errors; no stable per-query cost
+or quota measurement is recorded here.
 
 ### LLM call count per path (from your code)
 
@@ -323,7 +324,7 @@ High-probability interview topics in 2025–2026. Each has a **thinking frame** 
 
 > **Think:** Judge error rate, calibration, cascade failures.
 >
-> **Answer:** Yes — judges can false-reject or false-accept. I use low temperature (0.1), YES/NO only, short context truncation, and **reranker fallback** when judge rejects all. In production I'd measure judge agreement vs human labels on a sample. Proxy: reranker ≥ 0.5 correlates with relevance at **93.8%** on golden set.
+> **Answer:** Yes — judges can false-reject or false-accept. When document chat gets no approved chunks, it can use a flagged high-score fallback; that fallback does not mean the judge verified those chunks. In production I'd measure judge agreement vs human labels. The 93.8% figure is a reranker-based proxy on the golden set, not an LLM judge score.
 
 **Q: Regeneration loop — when do you stop trusting retries?**
 
@@ -373,7 +374,7 @@ High-probability interview topics in 2025–2026. Each has a **thinking frame** 
 
 > **Think:** Did we find the right text vs did the model lie?
 >
-> **Answer:** Retrieval F1 = did hybrid search return chunks from the right section? Faithfulness = given those chunks, is the answer supported? You can have **perfect retrieval, hallucinated answer** — that's why I judge after generation. My retrieval F1 is **93.9%**; full faithfulness eval pending quota.
+> **Answer:** Retrieval F1 = did hybrid search return chunks from the right section? Faithfulness = given those chunks, is the answer supported? You can have **perfect retrieval, hallucinated answer** — that's why I judge after generation. My custom retrieval F1 is **93.9%**; the native RAGAS runner has not produced a faithfulness score because Gemini generation returned 503 errors.
 
 **Q: How many test queries is enough?**
 

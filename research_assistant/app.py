@@ -10,20 +10,17 @@ except ImportError:
     def search_and_load(*args, **kwargs):
         raise NotImplementedError("arxiv_loader not available — use Deep-Read with arXiv URL instead.")
 from etl.chunker import chunk_documents_parent_child
-from retrieval.dense_retriever import DenseRetriever
-from retrieval.sparse_retriever import SparseRetriever
-from retrieval.multimodal_retriever import MultimodalRetriever
+from retrieval.runtime import get_hybrid_retriever, rebuild_index
 from orchestration.document_chat import chat_turn, _append_turn
 from orchestration.deep_read.orchestrator import run_deep_read
 from orchestration.simple_summarizer import summarize_from_index, format_llm_error
 from observability.feedback import append_feedback
 from api.feedback_router import router as feedback_router
+from api.rag_router import router as rag_router
 from memory.user_memory import resolve_user_id, start_session, update_from_feedback
 import uuid
 
 # ── Global State ──────────────────────────────────────────────────────────────
-INDEX_STORE_PATH = "./index_store/"
-
 DEFAULT_SUMMARY_GOAL = (
     "Summarize the uploaded PDF in simple, clear language. Include:\n"
     "- What the document is about (main topic)\n"
@@ -32,14 +29,7 @@ DEFAULT_SUMMARY_GOAL = (
     "Use short sections and bullet points. Avoid jargon."
 )
 
-dense_retriever = DenseRetriever()
-sparse_retriever = SparseRetriever()
-hybrid_retriever = MultimodalRetriever(dense_retriever, sparse_retriever)
-
-if hybrid_retriever.load(INDEX_STORE_PATH):
-    print(f"[app] Restored index from {INDEX_STORE_PATH}")
-else:
-    print(f"[app] No persisted index found at {INDEX_STORE_PATH}")
+hybrid_retriever = get_hybrid_retriever()
 
 
 # ── Indexing Functions ────────────────────────────────────────────────────────
@@ -50,26 +40,22 @@ def build_index_from_pdfs(files, progress=gr.Progress()) -> str:
     try:
         file_paths = [f.name for f in files]
         progress(0.1, desc="Loading PDFs...")
-        raw_docs = load_pdfs_from_files(file_paths, progress=progress)
+        raw_docs = load_pdfs_from_files(
+            file_paths,
+            progress=progress,
+            with_vision=True,
+        )
         
         progress(0.3, desc="Chunking documents (Parent-Child + Semantic)...")
         parent_docs, child_docs = chunk_documents_parent_child(raw_docs, progress=progress)
         
-        progress(0.7, desc="Building Dense Index...")
-        dense_retriever.build_index(child_docs)
-        
-        progress(0.8, desc="Building Sparse Index (BM25)...")
-        sparse_retriever.build_index(child_docs)
-        
-        progress(0.9, desc="Storing Parent Documents...")
-        hybrid_retriever.add_parents(parent_docs)
-
+        progress(0.7, desc="Building Dense and Sparse Indexes...")
+        result = rebuild_index(parent_docs, child_docs, replace=True)
         progress(0.95, desc="Saving index to disk...")
-        hybrid_retriever.save(INDEX_STORE_PATH)
         
         progress(1.0, desc="Indexing Complete!")
         return (
-            f"✅ Index ready ({len(child_docs)} chunks). "
+            f"✅ Index ready ({result['total_children']} chunks). "
             f"Go to **🔍 Research** tab and click **Summarize PDF Now**, "
             f"or use **Build Index & Summarize PDF** below for one-click summary."
         )
@@ -88,17 +74,11 @@ def build_index_from_arxiv(query: str, max_results: int, progress=gr.Progress())
         progress(0.3, desc="Chunking documents (Parent-Child + Semantic)...")
         parent_docs, child_docs = chunk_documents_parent_child(raw_docs, progress=progress)
         
-        progress(0.7, desc="Building Dense Index...")
-        dense_retriever.build_index(child_docs)
-        
-        progress(0.8, desc="Building Sparse Index (BM25)...")
-        sparse_retriever.build_index(child_docs)
-        
-        progress(0.9, desc="Storing Parent Documents...")
-        hybrid_retriever.add_parents(parent_docs)
+        progress(0.7, desc="Building Dense and Sparse Indexes...")
+        result = rebuild_index(parent_docs, child_docs, replace=True)
         
         progress(1.0, desc="Indexing Complete!")
-        return f"Successfully indexed {len(child_docs)} child chunks from {len(raw_docs)} arXiv papers."
+        return f"Successfully indexed {result['total_children']} child chunks from {len(raw_docs)} arXiv papers."
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -232,13 +212,13 @@ def build_index_and_summarize(files, max_queries: int = 3, progress=gr.Progress(
 async def _run_chat_turn(message: str, history: list, session_id: str) -> tuple:
     if not hybrid_retriever.dense.is_ready:
         reply = "⚠️ No documents indexed yet. Upload a PDF under **📚 Data Sources** and click **Build Index** first."
-        return "", _append_turn(history, message, reply), "", session_id
+        return "", _append_turn(history, message, reply), "", "", session_id
 
     try:
         Config.validate()
         llm = Config.get_llm()
     except Exception as e:
-        return "", _append_turn(history, message, f"Configuration error: {e}"), "", session_id
+        return "", _append_turn(history, message, f"Configuration error: {e}"), "", "", session_id
 
     sid = session_id or str(uuid.uuid4())
     user_id = resolve_user_id(session_id=sid)
@@ -278,7 +258,7 @@ def submit_chat_feedback(trace_id: str, rating: str, session_id: str) -> str:
 
 
 def clear_chat(session_id: str) -> tuple:
-    return [], "", "", "", str(uuid.uuid4())
+    return [], "", "", "", str(uuid.uuid4()), ""
 
 
 # ── Deep-Read (structured paper analysis) ─────────────────────────────────────
@@ -287,7 +267,7 @@ async def _run_deep_read_async(paper_url: str, pdf_file, progress=gr.Progress())
     try:
         Config.validate()
     except Exception as e:
-        return f"Configuration error: {e}", None, None, ""
+        return f"Configuration error: {e}", None, None, None
 
     def prog_cb(fraction: float, msg: str):
         progress(fraction, desc=msg)
@@ -299,7 +279,7 @@ async def _run_deep_read_async(paper_url: str, pdf_file, progress=gr.Progress())
         elif paper_url and paper_url.strip():
             result = await run_deep_read(paper_url.strip(), progress=prog_cb, is_upload=False)
         else:
-            return "Provide a paper URL (arXiv/PDF link) or upload a PDF.", None, None, ""
+            return "Provide a paper URL (arXiv/PDF link) or upload a PDF.", None, None, None
 
         status = (
             f"✅ **Deep-Read complete** ({result.latency_sec:.0f}s)\n\n"
@@ -312,7 +292,7 @@ async def _run_deep_read_async(paper_url: str, pdf_file, progress=gr.Progress())
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        return format_llm_error(exc), None, None, ""
+        return format_llm_error(exc), None, None, None
 
 
 def run_deep_read_ui(paper_url: str, pdf_file, progress=gr.Progress()):
@@ -453,11 +433,11 @@ def create_ui():
                     """
                     ### Structured paper analysis (how researchers actually read)
                     Paste an **arXiv link**, **PDF URL**, or **upload a PDF**. Deep-Read will:
-                    1. Download & extract text, **figures**, and **tables**
+                    1. Extract text, **handwriting**, figures, charts, and tables from every page
                     2. Analyze section-by-section: metadata → problem → method → figures → results → limitations
                     3. Merge into a **detailed report** + **PowerPoint** with paper images
 
-                    *Written for first-time readers — deep but understandable.*
+                    *Page images are analyzed by your configured vision provider; cloud providers receive the page images. Written for first-time readers — deep but understandable.*
                     """
                 )
                 with gr.Row():
@@ -497,6 +477,9 @@ def create_ui():
                             **Option A (easiest):** Upload PDF → **Build Index & Summarize PDF** — one click, summary appears in **🔍 Research → 📝 Final Report**.
 
                             **Option B:** Upload PDF → **Build Hybrid Index from PDFs** → go to **🔍 Research** → **Summarize PDF Now**.
+
+                            Page vision runs during indexing so handwritten notes, scanned text, charts, and diagrams become searchable.
+                            Configure an image-capable provider under `.env`; page images are sent to that provider unless you use a local vision model through Ollama.
                             """
                         )
                         pdf_file_input = gr.File(
@@ -552,14 +535,16 @@ def create_ui():
                     - **LLM Provider (auto)**: {Config.LLM_PROVIDER}
                     - **Gemini Model**: {Config.GEMINI_MODEL}
                     - **OpenAI Model**: {Config.OPENAI_MODEL}
+                    - **Vision Provider**: {Config.VISION_PROVIDER}
+                    - **Vision Model**: {Config.VISION_MODEL or "provider default"}
                     - **Embedding Model**: {Config.EMBEDDING_MODEL}
                     - **Perplexity Model**: {Config.PERPLEXITY_MODEL}
                     - **Chunk Size**: {Config.CHUNK_SIZE} chars (Overlap: {Config.CHUNK_OVERLAP})
                     - **Hybrid RRF K**: {Config.RRF_K}
 
-                    **BYOK:** Set `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `LLM_PROVIDER=openai|gemini|auto`
+                    **BYOK:** Set `OPENAI_API_KEY` or `GEMINI_API_KEY` for page vision. Configure `VISION_PROVIDER` and `VISION_MODEL` to select a separate image-capable model.
 
-                    *Note: Change settings in `.env` and restart the app.*
+                    *Page images are sent to the configured cloud vision provider. For local-only analysis, use `VISION_PROVIDER=ollama` with a vision-capable Ollama model. Change settings in `.env` and restart the app.*
                     """
                 )
 
@@ -574,6 +559,7 @@ def create_app():
         description="Hybrid RAG with Gemini verification and feedback API",
     )
     api.include_router(feedback_router)
+    api.include_router(rag_router)
     return gr.mount_gradio_app(api, demo, path="/")
 
 

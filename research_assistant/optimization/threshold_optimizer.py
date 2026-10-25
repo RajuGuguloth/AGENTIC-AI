@@ -61,42 +61,43 @@ def _compute_metrics_for_threshold(
     k: int = 5,
 ) -> Dict[str, float]:
     """
-    Precision@5: positive-feedback traces that still retrieve >=1 chunk at threshold.
-    Recall@5: traces with relevance_passed > 0 that still retrieve at threshold.
+    Feedback precision: retrieved traces that were positively rated
+        = TP / (TP + FP) where
+          TP = positive rating AND has_results,
+          FP = negative rating AND has_results.
+    Feedback recall: positively rated traces that still retrieve at threshold
+        = TP / (TP + FN) where
+          FN = positive rating AND NOT has_results.
     """
-    tp_precision = fp_precision = 0
-    tp_recall = fn_recall = 0
+    tp = fp = fn = 0
 
     for trace in traces:
         trace_id = trace.get("trace_id", "")
-        has_results, top_k = _simulate_at_threshold(trace, threshold, k=k)
-        verification = trace.get("verification") or {}
-        relevance_found = int(verification.get("relevance_passed", 0) or 0) > 0
+        has_results, _top_k = _simulate_at_threshold(trace, threshold, k=k)
         rating = feedback_index.get(trace_id)
+        if rating not in ("positive", "negative"):
+            continue
+        is_positive = rating == "positive"
+        if has_results and is_positive:
+            tp += 1
+        elif has_results and not is_positive:
+            fp += 1
+        elif not has_results and is_positive:
+            fn += 1
 
-        if rating == "positive":
-            if has_results and top_k >= 1:
-                tp_precision += 1
-            else:
-                fp_precision += 1
-
-        if relevance_found:
-            if has_results:
-                tp_recall += 1
-            else:
-                fn_recall += 1
-
-    precision = tp_precision / (tp_precision + fp_precision) if (tp_precision + fp_precision) else 0.0
-    recall = tp_recall / (tp_recall + fn_recall) if (tp_recall + fn_recall) else 0.0
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
 
     return {
         "threshold": threshold,
-        "precision_at_5": round(precision, 4),
-        "recall_at_5": round(recall, 4),
+        "feedback_precision": round(precision, 4),
+        "feedback_recall": round(recall, 4),
         "f1": round(f1, 4),
-        "positive_evaluated": tp_precision + fp_precision,
-        "relevance_evaluated": tp_recall + fn_recall,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "rated_evaluated": tp + fp + fn,
     }
 
 
@@ -116,7 +117,7 @@ def run_grid_search_batched(
 
 
 def select_best_threshold(results: List[Dict[str, float]]) -> Dict[str, float]:
-    return max(results, key=lambda r: (r["f1"], r["recall_at_5"], -r["threshold"]))
+    return max(results, key=lambda r: (r["f1"], r["feedback_precision"], r["threshold"]))
 
 
 def optimize_threshold(
@@ -135,6 +136,14 @@ def optimize_threshold(
         return {"status": "skipped", "reason": "no_traces"}
 
     feedback_index = _build_feedback_index(feedback)
+    rated_traces = [
+        trace for trace in traces
+        if feedback_index.get(trace.get("trace_id")) in ("positive", "negative")
+    ]
+    if not rated_traces:
+        print("[threshold_optimizer] No rated traces in window — skipping.")
+        return {"status": "skipped", "reason": "no_rated_feedback"}
+
     grid_results = run_grid_search_batched(traces, feedback_index)
     best = select_best_threshold(grid_results)
 
@@ -167,7 +176,7 @@ def optimize_threshold(
     if delta >= SIGNIFICANT_CHANGE:
         send_alert(
             f"MIN_RETRIEVAL_SCORE changed significantly: {old_threshold:.2f} → {new_threshold:.2f} "
-            f"(Δ={delta:.2f}, F1={best['f1']:.3f}, precision@5={best['precision_at_5']:.3f})"
+            f"(Δ={delta:.2f}, F1={best['f1']:.3f}, feedback precision={best['feedback_precision']:.3f})"
         )
     else:
         print(

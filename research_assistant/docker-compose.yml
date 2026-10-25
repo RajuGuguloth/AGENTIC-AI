@@ -1,0 +1,33 @@
+services:
+  rag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      RAG_API_KEY: ${RAG_API_KEY:?Set RAG_API_KEY in research_assistant/.env}
+      RAG_INDEX_PATH: /data/index_store
+    ports:
+      - "127.0.0.1:7860:7860"
+    volumes:
+      - rag_index:/data/index_store
+      - rag_artifacts:/app/artifacts
+      - rag_logs:/app/logs
+      - hf_cache:/root/.cache/huggingface
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/v1/health', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  rag_index:
+  rag_artifacts:
+  rag_logs:
+  hf_cache:

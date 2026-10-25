@@ -120,5 +120,11 @@ async def analyze_all_sections(
 ) -> List[SectionResult]:
     import asyncio
 
-    tasks = [analyze_section(spec, doc, gateway) for spec in SECTION_SPECS]
-    return list(await asyncio.gather(*tasks))
+    semaphore = asyncio.Semaphore(3)
+
+    async def analyze_with_limit(spec: dict) -> SectionResult:
+        async with semaphore:
+            return await analyze_section(spec, doc, gateway)
+
+    tasks = [analyze_with_limit(spec) for spec in SECTION_SPECS]
+    return await asyncio.gather(*tasks)

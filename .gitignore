@@ -24,12 +24,18 @@ ENV/
 .env.local
 **/.env
 **/.env.local
+**/.venv/
 
 # Local runtime / heavy artifacts
 research_assistant/venv/
 research_assistant/index_store/
 research_assistant/logs/
 research_assistant/artifacts/
+research_assistant/memory/user_profiles.jsonl
+research_assistant/evaluation/*_run.log
+research_assistant/evaluation/*results*.jsonl
+research_assistant/evaluation/*trace*.jsonl
+research_assistant/evaluation/orchestrator_report.json
 *.index
 *.faiss
 *.pkl

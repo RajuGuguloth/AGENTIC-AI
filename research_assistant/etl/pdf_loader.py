@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 from pypdf import PdfReader
 
 
-def load_pdf(file_path: str) -> List[Document]:
+def load_pdf(file_path: str, *, include_empty_pages: bool = False) -> List[Document]:
     """
     Extract text from a PDF file and return as a list of LangChain Documents,
     one Document per page.
@@ -33,9 +33,29 @@ def load_pdf(file_path: str) -> List[Document]:
             text = page.extract_text()
         except Exception as e:
             print(f"[pdf_loader] Warning: Could not extract page {page_num + 1} from {path.name}: {e}")
+            if include_empty_pages:
+                documents.append(Document(
+                    page_content="",
+                    metadata={
+                        "source": path.name,
+                        "file_path": str(path),
+                        "page": page_num + 1,
+                        "total_pages": len(reader.pages),
+                    }
+                ))
             continue
 
         if not text or not text.strip():
+            if include_empty_pages:
+                documents.append(Document(
+                    page_content="",
+                    metadata={
+                        "source": path.name,
+                        "file_path": str(path),
+                        "page": page_num + 1,
+                        "total_pages": len(reader.pages),
+                    }
+                ))
             continue
 
         documents.append(Document(
@@ -48,14 +68,19 @@ def load_pdf(file_path: str) -> List[Document]:
             }
         ))
 
-    if not documents:
+    if not documents and not include_empty_pages:
         raise ValueError(f"No extractable text found in {path.name}. It may be a scanned PDF.")
 
     print(f"[pdf_loader] Loaded {len(documents)} pages from '{path.name}'")
     return documents
 
 
-def load_pdfs_from_files(file_paths: List[str], progress=None) -> List[Document]:
+def load_pdfs_from_files(
+    file_paths: List[str],
+    progress=None,
+    *,
+    with_vision: bool = False,
+) -> List[Document]:
     """
     Load PDFs from a list of file paths (e.g., from Gradio upload).
 
@@ -78,9 +103,20 @@ def load_pdfs_from_files(file_paths: List[str], progress=None) -> List[Document]
             progress(i / total_files, desc=f"Loading {path.name}...")
             
         try:
-            docs = load_pdf(str(path))
+            docs = load_pdf(str(path), include_empty_pages=with_vision)
+            if with_vision:
+                from etl.vision_loader import enrich_pdf_documents_with_vision
+
+                docs = enrich_pdf_documents_with_vision(
+                    docs,
+                    progress=progress,
+                )
             all_docs.extend(docs)
         except Exception as e:
+            if with_vision:
+                raise RuntimeError(
+                    f"Failed to load and vision-analyze {path.name}: {e}"
+                ) from e
             print(f"[pdf_loader] Skipping {path.name}: {e}")
 
     if progress:

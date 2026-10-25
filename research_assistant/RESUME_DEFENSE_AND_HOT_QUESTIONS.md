@@ -8,7 +8,7 @@ This doc fills the gaps not covered in `INTERVIEW_PREP.md` / `PROJECT_GUIDE.md`:
 4. **"How do you handle RAG evaluation" — one complete answer**
 5. **Honesty caveats** so you never get caught overclaiming
 
-> **Golden rule:** say "**retrieval** F1 93.9%" — never "accuracy." Say "**RAGAS-style / RAGAS-aligned** metrics" — you did NOT use the official `ragas` library, you computed the same dimensions yourself in `ragas_batch.py`. Getting caught on that one word destroys trust.
+> **Golden rule:** say "**retrieval** F1 93.9%" — never "accuracy." Those published retrieval numbers come from custom metrics in `ragas_batch.py`, not from RAGAS. A native RAGAS evaluator has since been added, but it has not produced successful answer-quality scores yet because Gemini generation returned 503 errors.
 
 ---
 
@@ -58,7 +58,7 @@ For each bullet: **what it claims → where it lives in code → the 20-second s
 ---
 
 ### RESUME LINE 3
-> *"Achieved 93.9% retrieval F1, 95.8% in-domain Hit@k, and 92% precision on a 30-query labeled golden evaluation set using RAGAS-based metrics."*
+> *"Achieved 93.9% retrieval F1, 95.8% in-domain Hit@k, and 92% precision on a 30-query labeled golden set using custom retrieval metrics."*
 
 **Where it lives:**
 | Item | Proof |
@@ -71,8 +71,8 @@ For each bullet: **what it claims → where it lives in code → the 20-second s
 > *"I built a 30-query golden set — 24 in-domain, 6 off-topic to test abstention. `ragas_batch.py` replays the exact hybrid retrieval offline and computes precision, recall, F1, and Hit@k against the labeled relevant sections. On the Transformer index I get retrieval F1 of 93.9%, in-domain Hit@k 95.8%, precision 92%, and a context-relevancy proxy of 93.8% using the reranker score."*
 
 **CRITICAL TRAP — "RAGAS-based":**
-> *"To be precise, these are **RAGAS-aligned** metrics — I compute the same dimensions RAGAS defines (context relevancy, context recall → Hit@k), but in my own batch script, not the official `ragas` pip package. I didn't want to claim a library I didn't run."*
-This one sentence turns a potential "gotcha" into a **credibility win**.
+> *"Those retrieval precision, recall, F1, and Hit@k results are custom metrics from `ragas_batch.py`, not native RAGAS scores. I added `ragas_native.py` for answer-quality metrics, but I don't have successful native scores yet because Gemini generation returned 503 errors."*
+This keeps retrieval results and answer-quality evaluation clearly separated.
 
 **Trap — "is 30 queries enough?"** → *"Enough for a prototype regression smoke test, not for production SLAs. For a real claim I'd want 200+ stratified by query type — definitional, comparative, multi-hop, off-topic — with confidence intervals."*
 
@@ -94,7 +94,7 @@ This one sentence turns a potential "gotcha" into a **credibility win**.
 > *"Two judges. Before generation, a relevance judge grades each chunk YES/NO — this fixes garbage-in. After generation, a groundedness judge checks the answer is fully supported by the context — this fixes garbage-out. If groundedness fails, I regenerate up to three times with a stricter prompt. Judges run at temperature 0.1 and are **fail-closed**: if the API errors, I reject the chunk rather than risk a hallucination. For multi-step research, a planner splits the goal into up to four sub-queries and parallel worker agents each run their own retrieve-verify-answer loop, then a synthesizer merges the report."*
 
 **Trap — "reducing hallucinations — did you measure the reduction?"** Be honest:
-> *"I measured retrieval quality rigorously — F1 93.9%. The hallucination reduction is **architectural and design-level**, not yet a measured before/after number, because full faithfulness eval across all 30 queries was blocked by free-tier quota. The right way to prove it is an **ablation**: dense-only → hybrid → +rerank → +relevance judge → +groundedness, reporting F1 and pass rate at each layer. I have the harness to run it."*
+> *"I measured retrieval quality — F1 93.9%. The hallucination reduction is **architectural and design-level**, not a measured before/after number. The native RAGAS runner has not produced scores yet because Gemini generation returned 503 errors. The right way to prove the reliability improvement is an **ablation**: dense-only → hybrid → +rerank → +relevance judge → +groundedness, reporting retrieval and answer-quality metrics separately."*
 
 ---
 
@@ -209,9 +209,9 @@ Structure the answer as **four levels** — this framing itself impresses.
 
 > *"I evaluate at four levels.*
 >
-> ***1. Offline retrieval (the numbers I defend):*** a 30-query labeled golden set — 24 in-domain, 6 off-topic. `ragas_batch.py` replays the real hybrid retrieval and computes precision, recall, F1, and Hit@k against labeled relevant sections. Result: **retrieval F1 93.9%, in-domain Hit@k 95.8%, precision 92%.** These are RAGAS-**aligned** metrics I compute myself, not the official library.*
+> ***1. Offline retrieval (the numbers I defend):*** a 30-query labeled golden set — 24 in-domain, 6 off-topic. `ragas_batch.py` replays the real hybrid retrieval and computes precision, recall, F1, and Hit@k against labeled relevant sections. Result: **retrieval F1 93.9%, in-domain Hit@k 95.8%, precision 92%.** These are custom retrieval metrics, not native RAGAS scores.*
 >
-> ***2. Generation quality (relevance + groundedness):*** LLM-as-judge — context relevancy before generation, faithfulness after. When free-tier quota blocks the LLM judge, I fall back to a **proxy judge** (reranker score ≥ 0.5), which tracks relevance at 93.8% on the golden set. My `eval_orchestrator.py` auto-chooses LLM vs proxy based on quota, so eval never fails silently.*
+> ***2. Generation quality (relevance + groundedness):*** the application uses LLM-as-judge checks for relevance and groundedness. The historical 93.8% context-relevancy figure is a reranker-score proxy, not an LLM judge result. The native RAGAS evaluator exists, but Gemini generation returned 503 errors and no native answer-quality metrics are available yet.*
 >
 > ***3. Production monitoring:*** `daily_eval.py` reads `rag_traces.jsonl` for verification pass rate, regeneration rate, empty-retrieval rate, and latency. Honest gap: only a few live traces so far.*
 >
@@ -234,8 +234,8 @@ Volunteering a limit builds more trust than any metric. Keep 3 ready:
 | Caveat | How to say it |
 |--------|---------------|
 | Scale | *"Single paper, ~80 chunks. Metrics are strong in-domain; multi-document isn't tested yet."* |
-| RAGAS wording | *"RAGAS-aligned metrics, computed by me — not the official `ragas` package."* |
-| Faithfulness number | *"Full faithfulness eval across all 30 queries is quota-blocked; I report the proxy and don't invent the LLM-judge number."* |
+| RAGAS wording | *"The retrieval metrics are custom; a native RAGAS runner exists, but no successful answer-quality scores are available yet."* |
+| Faithfulness number | *"The native RAGAS runner has not produced a faithfulness score; Gemini generation returned 503 errors. The reported 93.8% is a reranker-based proxy."* |
 | Level-5 modules | *"Threshold optimizer, self-healer, A/B are implemented but data-starved — few production traces, so not yet statistically validated."* |
 | Freshness | *"Re-upload = full rebuild, latest wins; no incremental update or versioning yet — here's how I'd add it."* |
 | Agent logging | *"Research/agent path doesn't write to `rag_traces.jsonl` yet; I'd unify observability."* |
@@ -255,8 +255,8 @@ Volunteering a limit builds more trust than any metric. Keep 3 ready:
 | Why parent-child chunking? | Small children = search precision; big parents = LLM context. Decouple the two. |
 | Why judge twice? | Relevance fixes garbage-in; groundedness fixes garbage-out. Two failure modes. |
 | Is it really agentic? | Chat = fixed pipeline; Research = planner + parallel bounded worker agents. Word used precisely. |
-| RAGAS or your own metrics? | RAGAS-aligned dimensions, computed in my own `ragas_batch.py`, not the pip package. |
-| Biggest weakness? | Single-paper index; faithfulness quota-blocked; Level-5 modules data-starved. |
+| RAGAS or your own metrics? | Retrieval metrics are custom in `ragas_batch.py`; `ragas_native.py` is implemented, but native answer-quality scores have not completed successfully yet. |
+| Biggest weakness? | Single-paper index; no native faithfulness score yet; Level-5 modules data-starved. |
 | Cost per chat? | ~$0.0007 on Flash paid; 8–12 API calls; retrieval/embeddings/rerank are local and free. |
 | How would you scale to 1M docs? | Swap FAISS pickle for pgvector/Qdrant; shard by tenant; metadata pre-filter; async ingest queue; same retrieve→verify→generate logic. |
 | Prompt injection via PDF? | Untrusted PDF = untrusted prompt; mitigate with groundedness judge, trust tiers, injection test cases in golden set. |
